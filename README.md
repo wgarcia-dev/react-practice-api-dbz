@@ -48,6 +48,8 @@ El proyecto está organizado en componentes por responsabilidad y usa un servici
 │   │   └── ui/
 │   │       ├── Characters.tsx
 │   │       └── SearchBar.tsx
+│   ├── hooks/
+│   │   └── useCharacter.tsx
 │   ├── styles/
 │   ├── App.tsx
 │   ├── main.tsx
@@ -144,22 +146,47 @@ Esto permite:
 - evitar exponer propiedades sobrantes del modelo completo
 - centralizar el manejo de errores
 
-### Estado del componente principal
+### Custom hook de búsqueda y estado
 
-En `Main.tsx` el estado se maneja en el componente padre:
+La lógica del flujo de búsqueda y el manejo de estados se encapsula en el custom hook `useCharacter` dentro de `src/hooks/useCharacter.tsx`:
 
 ```ts
 const [characters, setCharacters] = useState<DbzProps[]>([]);
 const [hasSearched, setHasSearched] = useState(false);
 const [error, setError] = useState("");
 const [loading, setLoading] = useState(false);
+const [value, setValue] = useState("");
+
+const handleSubmit = async (e: React.SubmitEvent<HTMLFormElement>) => {
+  e.preventDefault();
+
+  const query = value.trim();
+
+  setLoading(true);
+
+  try {
+    const result = await GetCharactersByQuery(query);
+    setHasSearched(true);
+    setCharacters(result);
+  } catch (err) {
+    setError(err instanceof Error ? err.message : "Error desconocido");
+  } finally {
+    setLoading(false);
+  }
+};
 ```
 
-La búsqueda se dispara desde el formulario y se validan estos estados:
+El hook devuelve el estado y las funciones necesarias para el componente `Main.tsx`:
 
+- `characters`: resultados renderizados
+- `value`: texto del buscador
 - `loading`: mientras espera la respuesta
 - `error`: si la petición falla
+- `setValue`: actualiza el valor del input
+- `handleSubmit`: dispara la búsqueda
 - `hasSearched`: para distinguir entre “no se ha buscado aún” y “no hubo resultados”
+
+Esto deja a `Main.tsx` como un componente de composición visual, delegando la lógica de estado y petición al custom hook.
 
 ---
 
