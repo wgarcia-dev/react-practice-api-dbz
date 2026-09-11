@@ -1,34 +1,20 @@
 import { Characters } from "@components/ui/Characters";
 import { SearchBar } from "@components/ui/SearchBar";
-import { useState } from "react";
-import { GetCharactersByQuery } from "@api/get-characters-by-query";
-import type { DbzProps } from "@api/type.api";
+import { PreviousSearch } from "../ui/PreviousSearch";
+import { useCharacter } from "@/hooks/useCharacter";
 
 export function Main() {
-  const [characters, setCharacters] = useState<DbzProps[]>([]);
-
-  const [hasSearched, setHasSearched] = useState(false);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [value, setValue] = useState("");
-
-  const handleSubmit = async (e: React.SubmitEvent<HTMLFormElement>) => {
-    e.preventDefault();
-
-    const query = value.trim();
-
-    setLoading(true);
-
-    try {
-      const result = await GetCharactersByQuery(query);
-      setHasSearched(true);
-      setCharacters(result);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error desconocido");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const {
+    value,
+    terms,
+    characters,
+    loading,
+    error,
+    setValue,
+    handleSubmit,
+    handleTermClicked,
+    hasSearched,
+  } = useCharacter();
 
   return (
     <main className="min-h-[calc(100vh-180px)] bg-slate-950 text-white">
@@ -39,6 +25,8 @@ export function Main() {
           setValue={setValue}
           handleSubmit={handleSubmit}
         />
+
+        <PreviousSearch terms={terms} handleTermClicked={handleTermClicked} />
 
         <Characters
           characters={characters}
