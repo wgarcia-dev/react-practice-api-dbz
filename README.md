@@ -1,12 +1,12 @@
 # Dragon Ball Z API Practice
 
-Aplicación desarrollada con React, TypeScript y Tailwind CSS para practicar consumo de APIs REST, manejo de búsqueda por texto, render condicionado y tratamiento de errores.
+Aplicación desarrollada con React, TypeScript, Vite, Axios y Tailwind CSS para practicar consumo de una API REST de Dragon Ball, con búsqueda por raza, historial de búsquedas y estado visual de carga/error.
 
 ---
 
 ## Descripción general
 
-La app permite buscar personajes de Dragon Ball por nombre y mostrar una grilla visual con información relevante, como:
+La aplicación permite buscar personajes de Dragon Ball por raza y mostrar una grilla de tarjetas con la información principal, como:
 
 - nombre
 - raza
@@ -14,7 +14,7 @@ La app permite buscar personajes de Dragon Ball por nombre y mostrar una grilla 
 - ki
 - imagen
 
-El proyecto está organizado en componentes por responsabilidad y usa un servicio dedicado para encapsular la petición HTTP.
+La lógica de acceso a la API está centralizada en un servicio dedicado, mientras que el estado y la interacción de la búsqueda se manejan desde un hook personalizado.
 
 ---
 
@@ -22,10 +22,11 @@ El proyecto está organizado en componentes por responsabilidad y usa un servici
 
 - React 19
 - TypeScript
-- Vite
+- Vite 8
 - Tailwind CSS
 - Axios
 - PNPM
+- ESLint
 
 ---
 
@@ -47,11 +48,13 @@ El proyecto está organizado en componentes por responsabilidad y usa un servici
 │   │   │   └── Main.tsx
 │   │   └── ui/
 │   │       ├── Characters.tsx
+│   │       ├── PreviousSearch.tsx
 │   │       └── SearchBar.tsx
+│   ├── hooks/
+│   │   └── useCharacter.tsx
 │   ├── styles/
 │   ├── App.tsx
-│   ├── main.tsx
-│   └── vite-env.d.ts
+│   └── main.tsx
 ├── eslint.config.js
 ├── index.html
 ├── package.json
@@ -60,15 +63,14 @@ El proyecto está organizado en componentes por responsabilidad y usa un servici
 ├── tsconfig.app.json
 ├── tsconfig.json
 ├── tsconfig.node.json
-├── vite.config.ts
-└── public/
+└── vite.config.ts
 ```
 
 ---
 
 ## Modelo de datos
 
-La API devuelve una respuesta con un objeto paginado y el arreglo de personajes dentro de `items`.
+El contrato del modelo del lado del cliente se define en `src/api/type.api.ts` y se usa para adaptar la respuesta de la API a una estructura ligera de renderizado:
 
 ```ts
 export interface DbzProps {
@@ -79,49 +81,42 @@ export interface DbzProps {
   image: string;
   description: string;
 }
-
-export interface DbzResponse {
-  items: DbzCharacter[];
-  meta: Meta;
-  links: Links;
-}
-
-export interface DbzCharacter {
-  id: number;
-  name: string;
-  ki: string;
-  maxKi: string;
-  race: string;
-  gender: Gender;
-  description: string;
-  image: string;
-  affiliation: Affiliation;
-  deletedAt: null;
-}
 ```
+
+La configuración HTTP se crea en `src/api/base.axios.ts`:
+
+```ts
+export const DbzApi = axios.create({
+  baseURL: "https://dragonball-api.com/api/",
+  params: {
+    lang: "es",
+  },
+});
+```
+
+Esto permite que la API responda en español y centralice la base URL del proyecto.
 
 ---
 
-## Lógica actual del flujo
+## Flujo de búsqueda actual
 
-### Servicio de consulta
+### Servicio y normalización
 
-En `src/api/get-characters-by-query.ts` se encapsula la lógica de la búsqueda:
+En `src/api/get-characters-by-query.ts` la búsqueda se ejecuta consultando el endpoint `characters` con el parámetro `race` y un límite de `40` resultados:
 
 ```ts
 export async function GetCharactersByQuery(query: string): Promise<DbzProps[]> {
   try {
-    const response = await DbzApi<DbzResponse | DbzCharacter[]>("characters", {
+    const response = await DbzApi<DbzCharacter[]>("characters", {
       params: {
-        name: query.trim(),
-        limit: 10,
+        race: query.trim(),
+        limit: 40,
       },
     });
 
-    const rawData = response.data;
-    const characters = Array.isArray(rawData) ? rawData : rawData.items;
+    const characters = response.data;
 
-    return characters.length != 0
+    return characters.length !== 0
       ? characters.map((character) => ({
           id: character.id,
           name: character.name,
@@ -137,43 +132,48 @@ export async function GetCharactersByQuery(query: string): Promise<DbzProps[]> {
 }
 ```
 
-Esto permite:
+La lógica destaca estos puntos:
 
-- normalizar la búsqueda con `trim()`
-- devolver un arreglo del tipo que usa la UI
-- evitar exponer propiedades sobrantes del modelo completo
-- centralizar el manejo de errores
+- la consulta se envía con el parámetro `race`
+- el texto se normaliza con `trim()` para evitar espacios vacíos
+- solo se devuelve el subconjunto de propiedades que la interfaz necesita
+- el manejo de error se concentra en una sola capa de servicio
 
-### Estado del componente principal
+### Hook de estado y UX
 
-En `Main.tsx` el estado se maneja en el componente padre:
+La lógica de la búsqueda y la restauración de historial se encuentran en `src/hooks/useCharacter.tsx`.
 
-```ts
-const [characters, setCharacters] = useState<DbzProps[]>([]);
-const [hasSearched, setHasSearched] = useState(false);
-const [error, setError] = useState("");
-const [loading, setLoading] = useState(false);
-```
+El hook expone:
 
-La búsqueda se dispara desde el formulario y se validan estos estados:
+- `value`: valor del input
+- `terms`: historial persistido en localStorage
+- `characters`: lista renderizada
+- `loading`: estado de carga
+- `error`: mensaje de error
+- `hasSearched`: distingue primera pantalla inicial de búsqueda sin resultados
 
-- `loading`: mientras espera la respuesta
-- `error`: si la petición falla
-- `hasSearched`: para distinguir entre “no se ha buscado aún” y “no hubo resultados”
+Además implementa:
+
+- `runSearch(query)`: ejecuta la petición y almacena resultados en cache con `useRef`
+- `handleTerms(term)`: guarda una lista corta de búsquedas recientes
+- `handleSubmit(e)`: maneja el envío del formulario
+- `handleTermClicked(term)`: repite una búsqueda anterior desde el historial
+
+El historial se persiste en el navegador mediante `localStorage`, y la interfaz reutiliza el mismo hook desde `Main.tsx` para compartir estado entre `SearchBar`, `PreviousSearch` y `Characters`.
 
 ---
 
 ## UI y diseño
 
-La interfaz usa un estilo oscuro con un buscador centrado y una grilla responsiva de tarjetas para cada personaje.
+La interfaz usa un estilo oscuro con buscador y tarjetas visuales para los personajes. El componente principal de renderizado es `Characters.tsx`, y maneja los siguientes estados:
 
-El componente `Characters.tsx` maneja estas vistas:
+- sin búsqueda: `Busca un personaje...`
+- carga: `Cargando...`
+- error: devuelve el mensaje de error de la API
+- sin resultados: `No se encontraron personajes.`
+- resultados: lista responsiva de tarjetas con nombre, raza, imagen y ki
 
-- estado inicial: “Busca un personaje..."
-- carga: “Cargando..."
-- error: “Ocurrió un error...”
-- sin resultados: “No se encontraron personajes.”
-- resultados: tarjetas con nombre, raza, imagen y datos del personaje
+El componente `PreviousSearch.tsx` renderiza los términos recientes como botones clicables, permitiendo repetir búsquedas sin volver a escribir.
 
 ---
 
@@ -191,13 +191,28 @@ pnpm install
 pnpm dev
 ```
 
-Luego abre la app en el puerto que indique Vite, normalmente:
+La aplicación queda disponible en Vite, normalmente en:
 
 ```text
 http://localhost:5173
 ```
 
 ---
+
+## Scripts
+
+```json
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  }
+}
+```
+
+Esto permite arrancar la app localmente, construir la versión de producción y validar el estilo y calidad del código con ESLint.
 
 ## Uso
 
