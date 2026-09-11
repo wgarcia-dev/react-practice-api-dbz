@@ -31,7 +31,7 @@ export function Main() {
   };
 
   return (
-    <main className="min-h-[calc(100vh-180px)] bg-slate-950 text-white">
+    <main className="flex-1 bg-slate-950 text-white">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-8 sm:px-6">
         <SearchBar
           placeholder="Busca un personaje..."

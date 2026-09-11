@@ -220,6 +220,10 @@ http://localhost:5173
 
 <img src="./caps/image-3.png">
 
+<br>
+
+<img src="./caps/image-4.png">
+
 ## Nota
 
 Este proyecto está pensado como práctica de React + TypeScript + consumo de APIs con manejo de estados y validación de tipos.
